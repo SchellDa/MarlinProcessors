@@ -1,5 +1,6 @@
 #include "reftrackalignprocessor.h"
 #include <iostream>
+#include <fstream>
 #include <memory>
 #include "mymemory"
 
@@ -17,6 +18,9 @@
 #include <EUTelSparseClusterImpl.h>
 // ----- include for verbosity dependend logging ---------
 #include "marlin/VerbosityLevels.h"
+#include "marlin/Global.h"
+
+#include <gear/GearMgr.h>
 
 #ifdef MARLIN_USE_AIDA
 #include <marlin/AIDAProcessor.h>
@@ -33,10 +37,13 @@ RefTrackAlignProcessor aRefTrackAlignProcessor;
 
 
 RefTrackAlignProcessor::RefTrackAlignProcessor()
- : Processor("RefTrackAlignProcessor")
+ : Processor("RefTrackAlignProcessor"),
+ _colRefData(""), _colTracks(""), _refAlignDB(""), _refSensorId(8),
+ _siPlanesParameters(nullptr), _siPlanesLayerLayout(nullptr), _totalEvents(0),
+ _validEvents(0)
 {
 	_description = "Calculate REF offset-alignment using fitted Tracks.";
-
+	streamlog_out(DEBUG) << "RefTrackAlignProcessor constructor called. Wow." << std::endl;
 
 	// register steering parameters: name, description, class-variable, default value
 	registerInputCollection(
@@ -59,16 +66,23 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
 		_refAlignDB,
 		std::string("ref-align-db.slcio")
 		);
+	registerOptionalParameter(
+		"refSensorId",
+		"Sensor ID of the reference plane specified in the GEAR file.",
+		_refSensorId,
+		_refSensorId
+		);
 }
-
-
 
 void RefTrackAlignProcessor::init()
 {
-    streamlog_out(DEBUG) << "   init called  " << std::endl;
+	streamlog_out(DEBUG) << "   init called  " << std::endl;
 
-    // usually a good idea to
-    printParameters();
+	// usually a good idea to
+	printParameters();
+	
+	_siPlanesParameters = &Global::GEAR->getSiPlanesParameters();
+	_siPlanesLayerLayout = &_siPlanesParameters->getSiPlanesLayerLayout();
 }
 
 
@@ -78,6 +92,7 @@ void RefTrackAlignProcessor::processRunHeader(LCRunHeader* run)
 
 void RefTrackAlignProcessor::processEvent(LCEvent* evt)
 {
+	_totalEvents++;
 	LCCollection* colRefData = nullptr;
 	LCCollection* colTracks = nullptr;
 	try {
@@ -92,9 +107,10 @@ void RefTrackAlignProcessor::processEvent(LCEvent* evt)
 	}
 	// one or more input colletions not found in Event! Aborting...
 	if(!colRefData || !colTracks) {
+		// streamlog_out(ERROR) << "One or more input collections not found!" << std::endl;
 		return;
 	}
-	
+	_validEvents++;
 	//---------------------------------------------------------------------------
 	//       Read raw pulses in REF and transform to global coordinates
 	//---------------------------------------------------------------------------
@@ -177,6 +193,8 @@ void RefTrackAlignProcessor::check( LCEvent * evt )
 
 void RefTrackAlignProcessor::end()
 {
+	streamlog_out(MESSAGE4) << "Total number of events processed: " << _totalEvents << "\n"
+		                << "                    valid events: " << _validEvents << std::endl;
 	streamlog_out(DEBUG) << "Write alignment DB to " << _refAlignDB << std::endl;
 	// Try to open alignment DB file
 	auto writer = LCFactory::getInstance()->createLCWriter();
@@ -232,7 +250,7 @@ std::vector<Eigen::Vector2d> RefTrackAlignProcessor::getRefHits(LCCollection* co
 			hits.push_back(Eigen::Vector2d{sparsePixel->getXCoord(), sparsePixel->getYCoord()});
 		}
 	} catch(const std::exception& e) {
-		std::cerr << "Warning getRefHits(): " << e.what() << std::endl;
+		streamlog_out(WARNING) << "getRefHits(): " << e.what() << std::endl;
 	}
 	return hits;
 }
@@ -240,6 +258,57 @@ std::vector<Eigen::Vector2d> RefTrackAlignProcessor::getRefHits(LCCollection* co
 std::vector<Eigen::Vector3d> RefTrackAlignProcessor::transformRefHits(std::vector<Eigen::Vector2d> hits)
 {
 	std::vector<Eigen::Vector3d> transformed;
+	// "alias" to make code more readable
+	auto layers = _siPlanesLayerLayout;
+	int refIdx = -1;
+	for(int i=0; i<layers->getNLayers(); i++) {
+		auto id = layers->getID(i);
+		if(id == _refSensorId) {
+			refIdx = i;
+			break;
+		}
+	}
+	if(refIdx == -1) {
+		streamlog_out(ERROR4) << "Did not find REF in GEAR file with sensor ID "
+				      << _refSensorId << std::endl;
+		exit(-1);
+	}
+	Eigen::Vector3d layer_offset(
+		layers->getLayerPositionX(refIdx),
+		layers->getLayerPositionY(refIdx),
+		layers->getLayerPositionZ(refIdx));
+	/// \todo these are usually zero in our GEAR files, so we ignore them for now...
+	auto layer_alpha = layers->getLayerRotationZY(refIdx); // around X
+	auto layer_beta = layers->getLayerRotationZX(refIdx); // around Y
+	auto layer_gamma = layers->getLayerRotationXY(refIdx); // around Z
+	Eigen::Matrix3d layer_rot(Eigen::Matrix3d::Identity());
+
+	Eigen::Vector3d sensitive_offset(
+		layers->getSensitivePositionX(refIdx),
+		layers->getSensitivePositionY(refIdx),
+		layers->getSensitivePositionZ(refIdx));
+	Eigen::Matrix2d sensitive_rot;
+	sensitive_rot << layers->getSensitiveRotation1(refIdx),
+			 layers->getSensitiveRotation2(refIdx),
+			 layers->getSensitiveRotation3(refIdx),
+			 layers->getSensitiveRotation4(refIdx);
+	Eigen::Array2d sensitive_size(
+		layers->getSensitiveSizeX(refIdx),
+		layers->getSensitiveSizeY(refIdx));
+	Eigen::Array2i sensitive_npix(
+		layers->getSensitiveNpixelX(refIdx),
+		layers->getSensitiveNpixelY(refIdx));
+	auto sensitive_pitch = sensitive_size / sensitive_npix.cast<double>();
+	std::ofstream fout("test.csv", std::ofstream::app);
+	for(const auto& hit: hits) {
+		auto l_hit = sensitive_rot * (hit.array()*sensitive_pitch).matrix();
+		Eigen::Vector3d l_hit2 = {l_hit[0], l_hit[1], 0};
+		l_hit2 += sensitive_offset;
+		transformed.push_back(l_hit2);
+		fout << l_hit2(0) << " " << l_hit2(1) << " " << l_hit2(2) << "\n";
+	}
+	fout << "\n" << std::endl;
+		
 	return transformed;
 }
 

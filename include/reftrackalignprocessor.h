@@ -5,6 +5,9 @@
 #include "lcio.h"
 #include <string>
 #include <Eigen/Dense>
+#include <memory>
+#include <gear/SiPlanesParameters.h>
+#include <gear/SiPlanesLayerLayout.h>
 
 using namespace lcio;
 using namespace marlin;
@@ -55,9 +58,17 @@ protected:
 	std::string _colTracks;
 	/// REF alignment DB name
 	std::string _refAlignDB;
+	/// REF sensor id
+	int _refSensorId;
 private:
 	std::vector<Eigen::Vector2d> getRefHits(LCCollection* col);
 	std::vector<Eigen::Vector3d> transformRefHits(std::vector<Eigen::Vector2d> hits);
+
+	const gear::SiPlanesParameters* _siPlanesParameters;
+	const gear::SiPlanesLayerLayout* _siPlanesLayerLayout;
+
+	size_t _totalEvents;
+	size_t _validEvents;
 };
 
 #endif

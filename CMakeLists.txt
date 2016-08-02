@@ -5,67 +5,45 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6 FATAL_ERROR)
 ########################################################
 
 # project name
-PROJECT( RefTrackAlignProcessor )
+project(mymarlinprocessoris)
 
-
-# project version
-SET( ${PROJECT_NAME}_VERSION_MAJOR 0 )
-SET( ${PROJECT_NAME}_VERSION_MINOR 1 )
-SET( ${PROJECT_NAME}_VERSION_PATCH 0 )
-
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
 
 ### DEPENDENCIES ############################################################
 
-FIND_PACKAGE( ILCUTIL REQUIRED COMPONENTS ILCSOFT_CMAKE_MODULES )
+find_package(ILCUTIL REQUIRED COMPONENTS ILCSOFT_CMAKE_MODULES)
 
 # load default settings from ILCSOFT_CMAKE_MODULES
-INCLUDE( ilcsoft_default_settings )
+include(ilcsoft_default_settings)
 
+find_package(EUTelescope REQUIRED)
+include_directories(${EUTelescope_INCLUDE_DIR})
+link_libraries(${EUTelescope_LIBRARIES})
 
-FIND_PACKAGE( Marlin 1.0 REQUIRED ) # minimum required Marlin version
-INCLUDE_DIRECTORIES( ${Marlin_INCLUDE_DIRS} )
-LINK_LIBRARIES( ${Marlin_LIBRARIES} )
-ADD_DEFINITIONS( ${Marlin_DEFINITIONS} )
+find_package(Marlin 1.0 REQUIRED) # minimum required Marlin version
+include_directories(${Marlin_INCLUDE_DIRS})
+link_libraries(${Marlin_LIBRARIES})
+add_definitions(${Marlin_DEFINITIONS})
 
 # optional package
-#FIND_PACKAGE( AIDA )
-#IF( AIDA_FOUND )
-#    INCLUDE_DIRECTORIES( ${AIDA_INCLUDE_DIRS} )
-#    LINK_LIBRARIES( ${AIDA_LIBRARIES} )
-#    ADD_DEFINITIONS( "-DMARLIN_USE_AIDA" )
-#    MESSAGE( STATUS "AIDA -- found" )
-#ELSE()
-#    MESSAGE( STATUS "AIDA -- not found" )
-#ENDIF()
+find_package(AIDA)
+if(AIDA_FOUND)
+    include_directories( ${AIDA_INCLUDE_DIRS} )
+    LINK_LIBRARIES( ${AIDA_LIBRARIES} )
+    ADD_DEFINITIONS( "-DMARLIN_USE_AIDA" )
+    MESSAGE( STATUS "AIDA -- found" )
+else()
+    MESSAGE( STATUS "AIDA -- not found" )
+endif()
 
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wno-long-long -std=c++11")
 
-### DOCUMENTATION ###########################################################
-
-OPTION( INSTALL_DOC "Set to OFF to skip build/install Documentation" OFF )
-
-IF( INSTALL_DOC AND EXISTS "${PROJECT_SOURCE_DIR}/doc/CMakeLists.txt" )
-    ADD_SUBDIRECTORY( ./doc )
-ENDIF()
+include_directories("include")
 
 
-
-### LIBRARY #################################################################
-
-# definitions to pass to the compiler
-ADD_DEFINITIONS( "-Wall -pedantic" )
-ADD_DEFINITIONS( "-Wno-long-long" )
-
-# include directories
-INCLUDE_DIRECTORIES( . )
-#INSTALL_DIRECTORY( ./include DESTINATION . FILES_MATCHING PATTERN "*.h" )
-
-# add library
-AUX_SOURCE_DIRECTORY( . library_sources )
-ADD_SHARED_LIBRARY( ${PROJECT_NAME} reftrackalignprocessor.cpp )
-INSTALL_SHARED_LIBRARY( ${PROJECT_NAME} DESTINATION lib )
+add_shared_library(RefTrackAlignProcessor src/reftrackalignprocessor.cpp)
 
 # display some variables and write them to cache
-DISPLAY_STD_VARIABLES()
+display_std_variables()
 
