@@ -1,5 +1,5 @@
-#ifndef RefTrackAlignProcessor_h
-#define RefTrackAlignProcessor_h 1
+#ifndef RefTransformProcessor_h
+#define RefTransformProcessor_h 1
 
 #include "marlin/Processor.h"
 #include "lcio.h"
@@ -21,17 +21,17 @@ using namespace marlin;
  * @param CollectionName Name of the MCParticle collection
  * 
  * @author F. Gaede, DESY
- * @version $Id: RefTrackAlignProcessor.h,v 1.4 2005-10-11 12:57:39 gaede Exp $ 
+ * @version $Id: RefTransformProcessor.h,v 1.4 2005-10-11 12:57:39 gaede Exp $ 
  */
 
-class RefTrackAlignProcessor : public Processor
+class RefTransformProcessor : public Processor
 { 
 public:
   
-	virtual Processor*  newProcessor() { return new RefTrackAlignProcessor; }
+	virtual Processor*  newProcessor() { return new RefTransformProcessor; }
 	
 	
-	RefTrackAlignProcessor();
+	RefTransformProcessor();
 	
 	/** Called at the begin of the job before anything is read.
 	 * Use to initialize the processor, e.g. book histograms.
@@ -58,12 +58,16 @@ public:
 protected:
 	/// REF tracker data collection name
 	std::string _colRefData;
-	/// fitted Track collection name
-	std::string _colTracks;
-	/// REF alignment DB name
+	/// REF 
 	std::string _refAlignDB;
 	/// REF cut data file
 	std::string _refCutDB;
+	/// fitted Track collection name
+	std::string _colTracks;
+	/// Output collection name
+	std::string _colTransformedRefData;
+	/// Width of the datacut in multiples of sigma
+	int _cutWidthTimesSigma;
 	/// Flip X coordinate
 	bool _flipXCoordinate;
 	/// Flip Y coordinate
@@ -71,8 +75,6 @@ protected:
 	/// REF sensor id
 	int _refSensorId;
 
-
-private:
 	struct track_t {
 		std::vector<Eigen::Vector3d> fitted;
 		std::vector<Eigen::Vector3d> raw;
@@ -82,31 +84,26 @@ private:
 		int trackNumber;
 	};
 
+	struct cut_t {
+		double meanX;
+		double meanY;
+		double sigmaX;
+		double sigmaY;
+	};
+
+	cut_t _cutData;
+
+private:
 	std::vector<Eigen::Vector2d> getRefHits(LCCollection* col);
 	std::vector<Eigen::Vector3d> transformRefHits(std::vector<Eigen::Vector2d> hits);
 	std::vector<track_t> getTracksFromCollection(LCEvent* evt, LCCollection* col);
 
 	void bookHistos();
-	void cutCorrelationHistogram(TH2D* hist, AIDA::IProfile1D* debugProfile);
 
 	const gear::SiPlanesParameters* _siPlanesParameters;
 	const gear::SiPlanesLayerLayout* _siPlanesLayerLayout;
 
-	size_t _totalEvents;
-	size_t _validEvents;
-
-	TH2D* _refTrackExtrapolatedXCor;
-	TH2D* _refTrackExtrapolatedYCor;
-	TH1D* _xCorHist;
-	TH1D* _yCorHist;
-
 #if defined(USE_AIDA) || defined(MARLIN_USE_AIDA)
-	AIDA::IHistogram2D* refTrackXCorrelation;
-	AIDA::IHistogram2D* refTrackYCorrelation;
-	AIDA::IHistogram2D* refTrackGlobalXCor;
-	AIDA::IHistogram2D* refTrackGlobalYCor;
-	AIDA::IProfile1D* refTrackGlobalXProfile;
-	AIDA::IProfile1D* refTrackGlobalYProfile;
 #endif
 };
 

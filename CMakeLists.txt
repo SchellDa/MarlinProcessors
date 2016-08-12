@@ -11,6 +11,11 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
 
 ### DEPENDENCIES ############################################################
 
+find_package(ROOT REQUIRED)
+include_directories(${ROOT_INCLUDE_DIRS})
+link_directories(${ROOT_LIBRARY_PATH})
+link_libraries(${ROOT_LIBRARIES})
+
 find_package(ILCUTIL REQUIRED COMPONENTS ILCSOFT_CMAKE_MODULES)
 
 # load default settings from ILCSOFT_CMAKE_MODULES
@@ -42,7 +47,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wno-long-long -std=c++1
 include_directories("include")
 
 
-add_shared_library(RefTrackAlignProcessor src/reftrackalignprocessor.cpp)
+add_shared_library(TrackerProcessors src/reftrackalignprocessor.cpp src/reftransformprocessor.cpp)
 
 # display some variables and write them to cache
 display_std_variables()
