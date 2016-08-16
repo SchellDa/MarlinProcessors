@@ -172,14 +172,26 @@ void RefTransformProcessor::init()
 	if(_debugCsvOutput) {
 		// clear existing debug output file and write header
 		std::ofstream of(_debugCsvOutputFile);
-		of.exceptions(of.failbit);
+		try {
+			of.exceptions(of.failbit);
+		} catch(const std::exception& e) {
+			streamlog_out(ERROR) << "Cannot open debug output CSV file '" << _debugCsvOutput
+			                     << "'. Reason: " << e.what() << std::endl;
+			throw;
+		}
 		of << "# X\tY\tZ\tEvt\tRun\tDummy\n";
 		of.close();
 	}
 	if(_csvOutputFileEnable) {
 		// clear existing debug output file and write header
 		std::ofstream of(_csvOutputFile);
-		of.exceptions(of.failbit);
+		try {
+			of.exceptions(of.failbit);
+		} catch(const std::exception& e) {
+			streamlog_out(ERROR) << "Cannot open CSV output file '" << _csvOutputFile
+			                     << "'. Reason: " << e.what() << std::endl;
+			throw;
+		}
 		of << "# X\tY\tZ\tSensorID\tEvt\tRun\n";
 		of.close();
 	}
