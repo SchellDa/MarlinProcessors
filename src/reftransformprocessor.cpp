@@ -47,7 +47,8 @@ RefTransformProcessor aRefTransformProcessor;
 RefTransformProcessor::RefTransformProcessor()
  : Processor("RefTransformProcessor"),
  _colRefData(""), _refAlignDB(""), _refCutDB(""), _colTracks(""), _colTransformedRefData(""),
- _cutWidthTimesSigma(2), _flipXCoordinate(false), _flipYCoordinate(true), _refSensorId(8),
+ _csvOutputFile("transformed.csv"), _csvOutputFileEnable(true), _cutWidthTimesSigma(2), _flipXCoordinate(false), _flipYCoordinate(true), _refSensorId(8),
+ _debugCsvOutput(false), _debugCsvOutputFile("tracktransform.csv"), 
  _siPlanesParameters(nullptr), _siPlanesLayerLayout(nullptr)
 {
 	_description = "Transform REF hits to global coordinate system, cut uncorrelated events and apply alignment.";
@@ -73,6 +74,25 @@ RefTransformProcessor::RefTransformProcessor()
 		"Name of the output collection for the transformed and cut ref data",
 		_colTransformedRefData,
 		std::string("refhit")
+		);
+/*	registerOutputCollection(
+		LCIO::TRACK,
+		"FilteredTrackCollectionName",
+		"Name of the collection where tracks hitting the REF are saved.",
+		_colFilteredTracks,
+		std::string("reftracks")
+		);*/
+	registerProcessorParameter(
+		"csvOutputFilename",
+		"Name of the clear-text CSV output file",
+		_csvOutputFile,
+		_csvOutputFile
+		);
+	registerProcessorParameter(
+		"csvOutputEnable",
+		"Enable clear text CSV output",
+		_csvOutputFileEnable,
+		_csvOutputFileEnable
 		);
 	registerProcessorParameter(
 		"refAlignDbFileName",
@@ -110,6 +130,18 @@ RefTransformProcessor::RefTransformProcessor()
 		_refSensorId,
 		_refSensorId
 		);
+	registerOptionalParameter(
+		"debugCsvOutput",
+		"Enable debugging output with plain CSV files.",
+		_debugCsvOutput,
+		_debugCsvOutput
+		);
+	registerOptionalParameter(
+		"debugCsvOutputFile",
+		"Output file for plain text CSV debugging output",
+		_debugCsvOutputFile,
+		_debugCsvOutputFile
+		);
 }
 
 void RefTransformProcessor::init()
@@ -137,6 +169,20 @@ void RefTransformProcessor::init()
 		<< _cutData.meanY << " "
 		<< _cutData.sigmaX << " "
 		<< _cutData.sigmaY << std::endl;
+	if(_debugCsvOutput) {
+		// clear existing debug output file and write header
+		std::ofstream of(_debugCsvOutputFile);
+		of.exceptions(of.failbit);
+		of << "# X\tY\tZ\tEvt\tRun\tDummy\n";
+		of.close();
+	}
+	if(_csvOutputFileEnable) {
+		// clear existing debug output file and write header
+		std::ofstream of(_csvOutputFile);
+		of.exceptions(of.failbit);
+		of << "# X\tY\tZ\tSensorID\tEvt\tRun\n";
+		of.close();
+	}
 }
 
 
@@ -180,6 +226,24 @@ void RefTransformProcessor::processEvent(LCEvent* evt)
 	{
 		col = new LCCollectionVec(LCIO::TRACKERHIT);
 	}
+//	LCCollectionVec* colFilteredTracks = nullptr;
+//	try
+//	{
+//		colFilteredTracks  = static_cast<LCCollectionVec*> (evt->getCollection(_colFilteredTracks));
+//	}
+//	catch(...)
+//	{
+//		colFilteredTracks = new LCCollectionVec(LCIO::TRACK);
+//	}
+	bool eventHasHits = false;
+	std::ofstream of;
+	if(_debugCsvOutput) {
+		of.open(_debugCsvOutputFile, std::ofstream::app);
+	}
+	std::ofstream csv;
+	if(_csvOutputFileEnable) {
+		csv.open(_csvOutputFile, std::ofstream::app);
+	}
 	CellIDEncoder<TrackerHitImpl> idHitEncoder(EUTELESCOPE::HITENCODING, col);
 	for(const auto& ghit: global_hits) {
 		auto hit = ghit + Eigen::Vector3d(-_cutData.meanX, -_cutData.meanY, 0);	
@@ -189,24 +253,76 @@ void RefTransformProcessor::processEvent(LCEvent* evt)
 			auto dir = track.fitted[2] - track.fitted[0];
 			auto t = (hit(2) - base(2)) / dir(2);
 			auto hit_extrapolated = base + t*dir;
-			streamlog_out(MESSAGE) << "HIT " << hit-hit_extrapolated << "\nMAX DIST " << max_dist << std::endl;
+			// streamlog_out(MESSAGE) << "HIT " << hit-hit_extrapolated << "\nMAX DIST " << max_dist << std::endl;
 			if(((hit-hit_extrapolated).array().abs() > max_dist).any()) {
-				streamlog_out(MESSAGE) << "Discard!" << std::endl;
+				// streamlog_out(MESSAGE) << "Discard!" << std::endl;
 				continue;
 			}
-			streamlog_out(MESSAGE) << "Push Back" << std::endl;
+			// streamlog_out(MESSAGE) << "Push Back" << std::endl;
+			eventHasHits = true;
 			auto new_hit = new IMPL::TrackerHitImpl();
 			/// \todo Much stuff missing(?), see EUTelProcessorHitMaker.cc:517
-			double* posPtr = nullptr;
+			double posPtr[3];
 			Eigen::Map<Eigen::Vector3d>(posPtr, hit.rows(), hit.cols()) = hit;
+			assert(posPtr != nullptr);
 			new_hit->setPosition(posPtr);
 			idHitEncoder["sensorID"] = _refSensorId;
 			idHitEncoder["properties"] = 0;
 			idHitEncoder["properties"] = kHitInGlobalCoord;
 			idHitEncoder.setCellID(new_hit);
 			col->push_back(new_hit);
+			if(_debugCsvOutput) {
+				of << posPtr[0] << "\t"
+				   << posPtr[1] << "\t"
+				   << posPtr[2] << "\t"
+				   << evt->getEventNumber() << "\t"
+				   << evt->getRunNumber() << "\t"
+				   << "0\n"; // not a dummy event
+			}
+
+			// track and ref hit in line! save track
+			if(_csvOutputFileEnable) {
+				for(size_t i=0; i<track.fitted.size(); i++) {
+					csv << track.fitted[i](0) << "\t"
+					    << track.fitted[i](1) << "\t"
+					    << track.fitted[i](2) << "\t"
+					    << track.fittedSensor[i] << "\t"
+					    << evt->getEventNumber() << "\t"
+					    << evt->getRunNumber() << "\n";
+				}
+				csv << posPtr[0] << "\t"
+				    << posPtr[1] << "\t"
+				    << posPtr[2] << "\t"
+				    << _refSensorId << "\t"
+				    << evt->getEventNumber() << "\t"
+				    << evt->getRunNumber() << "\n\n\n";
+			}
+
+			// track and ref hit in line! save track
+/*			auto original_track = colTracks->getElementAt(track.trackNumber);
+			assert(original_track);
+			auto track_cpy = original_track->clone();
+			assert(track_cpy);
+			assert(original_track != track_cpy); // as long as LCIO does not support clone, no collection for you!
+			colFilteredTracks->push_back(track_cpy);*/
 		}
 	}
+	if(_debugCsvOutput) {
+		if(eventHasHits) {
+			of << "\n\n"; // two empty lines -> new block
+		} else {
+			of << "0\t0\t0\t"
+			   << evt->getEventNumber() << "\t"
+			   << evt->getRunNumber() << "\t"
+			   << "1\n\n\n"; // dummy event
+		}
+		of.close();
+	}
+	if(_csvOutputFileEnable) {
+		csv.flush();
+		csv.close();
+	}
+	//evt->addCollection(colFilteredTracks, _colFilteredTracks);
 	evt->addCollection(col, _colTransformedRefData); 
 }
 

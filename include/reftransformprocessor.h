@@ -66,6 +66,12 @@ protected:
 	std::string _colTracks;
 	/// Output collection name
 	std::string _colTransformedRefData;
+	/// Output collection with tracks hitting REF
+	// std::string _colFilteredTracks;
+	/// Clear-text output filename
+	std::string _csvOutputFile;
+	/// Clear-text enable
+	bool _csvOutputFileEnable;
 	/// Width of the datacut in multiples of sigma
 	int _cutWidthTimesSigma;
 	/// Flip X coordinate
@@ -74,6 +80,10 @@ protected:
 	bool _flipYCoordinate;
 	/// REF sensor id
 	int _refSensorId;
+	/// Debug CSV output
+	bool _debugCsvOutput;
+	/// Debug CSV output file
+	std::string _debugCsvOutputFile;
 
 	struct track_t {
 		std::vector<Eigen::Vector3d> fitted;
