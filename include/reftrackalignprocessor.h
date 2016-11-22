@@ -10,6 +10,7 @@
 #include <gear/SiPlanesLayerLayout.h>
 #include <TH2D.h>
 #include <TH1D.h>
+#include <TF1.h>
 #if defined(USE_AIDA) || defined(MARLIN_USE_AIDA)
 #include <AIDA/IHistogram2D.h>
 #include <AIDA/IProfile1D.h>
@@ -70,6 +71,8 @@ protected:
 	bool _flipYCoordinate;
 	/// REF sensor id
 	int _refSensorId;
+	/// NAF mode
+	bool _noisyAsFuckMode;
 
 
 private:

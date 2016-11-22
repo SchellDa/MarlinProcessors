@@ -25,6 +25,7 @@
 
 #include <TProfile.h>
 #include <TFitResult.h>
+#include <TF1.h>
 
 #ifdef MARLIN_USE_AIDA
 #include <AIDA/ITree.h>
@@ -47,7 +48,8 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
  _colRefData(""), _colTracks(""), _refAlignDB(""), _refCutDB(""),
  _flipXCoordinate(false), _flipYCoordinate(true), _refSensorId(8),
  _siPlanesParameters(nullptr), _siPlanesLayerLayout(nullptr), _totalEvents(0),
- _validEvents(0), _refTrackExtrapolatedXCor(nullptr), _refTrackExtrapolatedYCor(nullptr)
+ _validEvents(0), _refTrackExtrapolatedXCor(nullptr), _refTrackExtrapolatedYCor(nullptr), 
+ _noisyAsFuckMode(false)
 {
 	_description = "Calculate REF offset-alignment using fitted Tracks.";
 	streamlog_out(DEBUG) << "RefTrackAlignProcessor constructor called. Wow." << std::endl;
@@ -96,6 +98,13 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
 		"Sensor ID of the reference plane specified in the GEAR file.",
 		_refSensorId,
 		_refSensorId
+		);
+
+	registerOptionalParameter(
+		"noisyAsFuck",
+		"Enable NAF mode",
+		_noisyAsFuckMode,
+		_noisyAsFuckMode
 		);
 }
 
@@ -248,10 +257,28 @@ void RefTrackAlignProcessor::end()
 	_yCorHist->GetCenter(&y_centers[0]);
 	auto x_max_loc = x_centers[_xCorHist->GetMaximumBin()];
 	auto y_max_loc = y_centers[_yCorHist->GetMaximumBin()];
+
 	auto resultX = _xCorHist->Fit("gaus", "FSMR", "", x_max_loc - _xCorHist->GetRMS()/2,
-			x_max_loc + _xCorHist->GetRMS()/2);
+								  x_max_loc + _xCorHist->GetRMS()/2);
 	auto resultY = _yCorHist->Fit("gaus", "FSMR", "", y_max_loc - _yCorHist->GetRMS()/2,
-			y_max_loc + _yCorHist->GetRMS()/2);
+								  y_max_loc + _yCorHist->GetRMS()/2);
+	if(_noisyAsFuckMode) {
+		auto rms = 0.6;
+		auto func = new TF1("gaus_base", "[0]*exp(-(x-[1])**2 / [2]**2) + [3]");
+		func->SetParameter(0, 1);
+		func->SetParameter(1, x_max_loc);
+		func->SetParameter(2, 0.1);
+		func->SetParameter(3, 1);
+		func->SetParLimits(2, 0, 0.3);
+		resultX = _xCorHist->Fit("gaus_base", "SAMER+", "", x_max_loc-rms, x_max_loc+rms);
+		func->SetParameter(0, 1);
+		func->SetParameter(1, y_max_loc);
+		func->SetParameter(2, 0.1);
+		func->SetParameter(3, 1);
+		func->SetParLimits(2, 0, 0.3);
+		resultY = _yCorHist->Fit("gaus_base", "SAMER+", "", y_max_loc-rms, y_max_loc+rms);
+	}
+
 	Eigen::Array2d offset(resultX->Parameter(1), resultY->Parameter(1));
 	Eigen::Array2d offsetError(resultX->Error(1), resultY->Error(1));
 	Eigen::Array2d sigma(resultY->Parameter(2), resultY->Parameter(2));
