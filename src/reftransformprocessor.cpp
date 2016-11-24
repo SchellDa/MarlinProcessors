@@ -142,6 +142,12 @@ RefTransformProcessor::RefTransformProcessor()
 		_debugCsvOutputFile,
 		_debugCsvOutputFile
 		);
+	registerProcessorParameter(
+		"swapRefAxis",
+		"Swap the X and Y coordinates of the REF hits.",
+		_swapRefAxis,
+		_swapRefAxis
+		);
 }
 
 void RefTransformProcessor::init()
@@ -209,12 +215,12 @@ void RefTransformProcessor::processEvent(LCEvent* evt)
 	try {
 		colRefData = evt->getCollection(_colRefData);
 	} catch(lcio::DataNotAvailableException& e) {
-		// streamlog_out(WARNING) << e.what() << std::endl;
+		//streamlog_out(WARNING) << e.what() << std::endl;
 	}
 	try {
 		colTracks = evt->getCollection(_colTracks);
 	} catch(lcio::DataNotAvailableException& e) {
-		// streamlog_out(WARNING) << e.what() << std::endl;
+		//streamlog_out(WARNING) << e.what() << std::endl;
 	}
 	// one or more input colletions not found in Event! Aborting...
 	if(!colRefData || !colTracks) {
@@ -265,12 +271,12 @@ void RefTransformProcessor::processEvent(LCEvent* evt)
 			auto dir = track.fitted[2] - track.fitted[0];
 			auto t = (hit(2) - base(2)) / dir(2);
 			auto hit_extrapolated = base + t*dir;
-			// streamlog_out(MESSAGE) << "HIT " << hit-hit_extrapolated << "\nMAX DIST " << max_dist << std::endl;
+		//	streamlog_out(MESSAGE) << "HIT " << hit-hit_extrapolated << "\nMAX DIST " << max_dist << std::endl;
 			if(((hit-hit_extrapolated).array().abs() > max_dist).any()) {
 				// streamlog_out(MESSAGE) << "Discard!" << std::endl;
 				continue;
 			}
-			// streamlog_out(MESSAGE) << "Push Back" << std::endl;
+		//	streamlog_out(MESSAGE) << "Push Back" << std::endl;
 			eventHasHits = true;
 			auto new_hit = new IMPL::TrackerHitImpl();
 			/// \todo Much stuff missing(?), see EUTelProcessorHitMaker.cc:517
@@ -416,6 +422,12 @@ std::vector<Eigen::Vector3d> RefTransformProcessor::transformRefHits(std::vector
 		auto l_hit = sensitive_rot * (hit.array()*sensitive_pitch - sensitive_size/2).matrix();
 		Eigen::Vector3d l_hit2 = {l_hit[0], l_hit[1], 0};
 		l_hit2 += sensitive_offset;
+		if(_swapRefAxis) {
+			double x = l_hit2(0);
+			double y = l_hit2(1);
+			l_hit2(1) = x;
+			l_hit2(0) = y;
+		}
 		if(_flipXCoordinate) l_hit2(0) *= -1;
 		if(_flipYCoordinate) l_hit2(1) *= -1;
 		transformed.push_back(l_hit2);
@@ -428,8 +440,6 @@ void RefTransformProcessor::bookHistos()
 #if defined(USE_AIDA) || defined(MARLIN_USE_AIDA)
 #endif
 }
-
-
 
 std::vector<RefTransformProcessor::track_t> RefTransformProcessor::getTracksFromCollection(LCEvent* evt, LCCollection* col)
 {
