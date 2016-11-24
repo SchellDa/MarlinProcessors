@@ -278,8 +278,12 @@ void RefTrackAlignProcessor::end()
 	auto resultX = _xCorHist->Fit("gaus", "FSMR", "", x_max_loc - _xCorHist->GetRMS()/2,
 								  x_max_loc + _xCorHist->GetRMS()/2);
 	auto resultY = _yCorHist->Fit("gaus", "FSMR", "", y_max_loc - _yCorHist->GetRMS()/2,
-<<<<<<< HEAD
 								  y_max_loc + _yCorHist->GetRMS()/2);
+
+	if(!resultX || !resultY) {
+		streamlog_out(MESSAGE6) << "\"ERROR\", fitting failed!!!! Not alignment data written!" << std::endl;
+		return;
+	}
 	if(_noisyAsFuckMode) {
 		auto rms = 0.6;
 		auto func = new TF1("gaus_base", "[0]*exp(-(x-[1])**2 / [2]**2) + [3]");
@@ -296,14 +300,6 @@ void RefTrackAlignProcessor::end()
 		func->SetParLimits(2, 0, 0.3);
 		resultY = _yCorHist->Fit("gaus_base", "SAMER+", "", y_max_loc-rms, y_max_loc+rms);
 	}
-
-=======
-			y_max_loc + _yCorHist->GetRMS()/2);
-	if(!resultX || !resultY) {
-		streamlog_out(MESSAGE6) << "\"ERROR\", fitting failed!!!! Not alignment data written!" << std::endl;
-		return;
-	}
->>>>>>> Implemented X and Y flip and XY-Swap
 	Eigen::Array2d offset(resultX->Parameter(1), resultY->Parameter(1));
 	Eigen::Array2d offsetError(resultX->Error(1), resultY->Error(1));
 	Eigen::Array2d sigma(resultY->Parameter(2), resultY->Parameter(2));
