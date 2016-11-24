@@ -12,7 +12,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
 ### DEPENDENCIES ############################################################
 
 find_package(ROOT REQUIRED)
-include_directories(${ROOT_INCLUDE_DIRS})
+include_directories(${ROOT_INCLUDE_DIR})
 link_directories(${ROOT_LIBRARY_PATH})
 link_libraries(${ROOT_LIBRARIES})
 
