@@ -78,6 +78,8 @@ protected:
 	bool _flipXCoordinate;
 	/// Flip Y coordinate
 	bool _flipYCoordinate;
+	/// xxx
+	bool _swapRefAxis;
 	/// REF sensor id
 	int _refSensorId;
 	/// Debug CSV output

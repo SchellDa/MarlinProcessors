@@ -69,10 +69,14 @@ protected:
 	bool _flipXCoordinate;
 	/// Flip Y coordinate
 	bool _flipYCoordinate;
+	/// Swap X and Y coordinate
+	bool _swapRefAxis;
 	/// REF sensor id
 	int _refSensorId;
 	/// NAF mode
 	bool _noisyAsFuckMode;
+	/// Number of corplot histogram bins
+	int _nBins;
 
 
 private:

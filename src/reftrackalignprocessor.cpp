@@ -2,6 +2,8 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <algorithm>
+#include <utility>
 #include "mymemory"
 
 #include <EVENT/LCCollection.h>
@@ -45,8 +47,8 @@ RefTrackAlignProcessor aRefTrackAlignProcessor;
 
 RefTrackAlignProcessor::RefTrackAlignProcessor()
  : Processor("RefTrackAlignProcessor"),
- _colRefData(""), _colTracks(""), _refAlignDB(""), _refCutDB(""),
- _flipXCoordinate(false), _flipYCoordinate(true), _refSensorId(8),
+ _colRefData("CMSPixelREF"), _colTracks(""), _refAlignDB(""), _refCutDB(""),
+ _flipXCoordinate(false), _flipYCoordinate(true), _swapRefAxis(false), _refSensorId(8), _nBins(1000),
  _siPlanesParameters(nullptr), _siPlanesLayerLayout(nullptr), _totalEvents(0),
  _validEvents(0), _refTrackExtrapolatedXCor(nullptr), _refTrackExtrapolatedYCor(nullptr), 
  _noisyAsFuckMode(false)
@@ -60,7 +62,7 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
         	"RefDataCollectionName", 
 		"Name of the collection containing REF TrackerData",
 		_colRefData,
-		std::string("CMSPixelREF")
+		_colRefData
 		);
 	registerInputCollection(
 		LCIO::TRACK,
@@ -88,6 +90,12 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
 		std::string("ref-cut-db.csv")
 		);
 	registerProcessorParameter(
+		"swapRefAxis",
+		"Swap the X and Y coordinates of the REF hits.",
+		_swapRefAxis,
+		_swapRefAxis
+		);
+	registerProcessorParameter(
 		"flipYCoordinate",
 		"Wether or not to flip the Y coordinate of the REF hits",
 		_flipYCoordinate,
@@ -99,12 +107,17 @@ RefTrackAlignProcessor::RefTrackAlignProcessor()
 		_refSensorId,
 		_refSensorId
 		);
-
 	registerOptionalParameter(
 		"noisyAsFuck",
 		"Enable NAF mode",
 		_noisyAsFuckMode,
 		_noisyAsFuckMode
+		);
+	registerOptionalParameter(
+		"nBins",
+		"Number of histogram bins",
+		_nBins,
+		_nBins
 		);
 }
 
@@ -114,6 +127,8 @@ void RefTrackAlignProcessor::init()
 
 	// usually a good idea to
 	printParameters();
+
+	streamlog_out(MESSAGE4) << "Ref collection: " << _colRefData << std::endl;
 
 	_siPlanesParameters = &Global::GEAR->getSiPlanesParameters();
 	_siPlanesLayerLayout = &_siPlanesParameters->getSiPlanesLayerLayout();
@@ -130,8 +145,8 @@ void RefTrackAlignProcessor::processRunHeader(LCRunHeader* run)
 		52, -5, 5, 300, -15, 15);
 	_refTrackExtrapolatedYCor = new TH2D("ExtrapolatedYCor", "REF <-> extrap. Track Y Correlation",
 		80, -5, 5, 300, -8, 6);	
-	_xCorHist = new TH1D("xCorHist", "X Correlation Histogram", 1000, -20, 20);
-	_yCorHist = new TH1D("yCorHist", "Y Correlation Histogram", 1000, -20, 20);
+	_xCorHist = new TH1D("xCorHist", "X Correlation Histogram", _nBins, -20, 20);
+	_yCorHist = new TH1D("yCorHist", "Y Correlation Histogram", _nBins, -20, 20);
 	// _refTrackExtrapolatedXCor->SetDirectory(nullptr);	
 	// _refTrackExtrapolatedYCor->SetDirectory(nullptr);	
 } 
@@ -142,18 +157,19 @@ void RefTrackAlignProcessor::processEvent(LCEvent* evt)
 	LCCollection* colRefData = nullptr;
 	LCCollection* colTracks = nullptr;
 	try {
+
 		colRefData = evt->getCollection(_colRefData);
 	} catch(lcio::DataNotAvailableException& e) {
-		// streamlog_out(WARNING) << e.what() << std::endl;
+		//streamlog_out(WARNING) << e.what() << std::endl;
 	}
 	try {
 		colTracks = evt->getCollection(_colTracks);
 	} catch(lcio::DataNotAvailableException& e) {
-		// streamlog_out(WARNING) << e.what() << std::endl;
+		//streamlog_out(WARNING) << e.what() << std::endl;
 	}
 	// one or more input colletions not found in Event! Aborting...
 	if(!colRefData || !colTracks) {
-		// streamlog_out(ERROR) << "One or more input collections not found!" << std::endl;
+		//streamlog_out(ERROR) << "One or more input collections not found!" << std::endl;
 		return;
 	}
 	_validEvents++;
@@ -215,6 +231,7 @@ void RefTrackAlignProcessor::processEvent(LCEvent* evt)
 		idx++;
 	}*/
 	for(auto& hit: global_hits) {
+		// streamlog_out(MESSAGE4) << "Got HIT!" << std::endl;
 		for(auto& track: tracks) {
 			// extrapolate track onto 2d REF layer
 			auto base = track.fitted[0];
@@ -261,6 +278,7 @@ void RefTrackAlignProcessor::end()
 	auto resultX = _xCorHist->Fit("gaus", "FSMR", "", x_max_loc - _xCorHist->GetRMS()/2,
 								  x_max_loc + _xCorHist->GetRMS()/2);
 	auto resultY = _yCorHist->Fit("gaus", "FSMR", "", y_max_loc - _yCorHist->GetRMS()/2,
+<<<<<<< HEAD
 								  y_max_loc + _yCorHist->GetRMS()/2);
 	if(_noisyAsFuckMode) {
 		auto rms = 0.6;
@@ -279,6 +297,13 @@ void RefTrackAlignProcessor::end()
 		resultY = _yCorHist->Fit("gaus_base", "SAMER+", "", y_max_loc-rms, y_max_loc+rms);
 	}
 
+=======
+			y_max_loc + _yCorHist->GetRMS()/2);
+	if(!resultX || !resultY) {
+		streamlog_out(MESSAGE6) << "\"ERROR\", fitting failed!!!! Not alignment data written!" << std::endl;
+		return;
+	}
+>>>>>>> Implemented X and Y flip and XY-Swap
 	Eigen::Array2d offset(resultX->Parameter(1), resultY->Parameter(1));
 	Eigen::Array2d offsetError(resultX->Error(1), resultY->Error(1));
 	Eigen::Array2d sigma(resultY->Parameter(2), resultY->Parameter(2));
@@ -307,7 +332,7 @@ void RefTrackAlignProcessor::end()
 	try {
 		// Write run header and create a single event
 		auto lcHeader = std::make_unique<LCRunHeaderImpl>();
-		lcHeader->setRunNumber(0);		
+		lcHeader->setRunNumber(0);
 		writer->writeRunHeader(lcHeader.get());
 		auto evt = std::make_unique<LCEventImpl>();
 		auto now = new UTIL::LCTime;
@@ -404,6 +429,12 @@ std::vector<Eigen::Vector3d> RefTrackAlignProcessor::transformRefHits(std::vecto
 		auto l_hit = sensitive_rot * (hit.array()*sensitive_pitch - sensitive_size/2).matrix();
 		Eigen::Vector3d l_hit2 = {l_hit[0], l_hit[1], 0};
 		l_hit2 += sensitive_offset;
+		if(_swapRefAxis) {
+			double x = l_hit2(0);
+			double y = l_hit2(1);
+			l_hit2(1) = x;
+			l_hit2(0) = y;
+		}
 		if(_flipXCoordinate) l_hit2(0) *= -1;
 		if(_flipYCoordinate) l_hit2(1) *= -1;
 		transformed.push_back(l_hit2);
